@@ -1,0 +1,20 @@
+const mongoose = require('mongoose');
+const matchSchema = new mongoose.Schema({
+  date_match: String,
+  competition: { type: mongoose.Schema.Types.ObjectId, ref: 'League' },
+  equipe_domicile: { type: mongoose.Schema.Types.ObjectId, ref: 'Team' },
+  equipe_exterieur: { type: mongoose.Schema.Types.ObjectId, ref: 'Team' },
+  score_domicile: { type: Number, default: null },
+  score_exterieur: { type: Number, default: null },
+  score: String,
+  status: String,
+  score_polemicometre: Number,
+  apercu_titre_fr: String,
+  apercu_contenu_fr: String,
+  titre_fr: String,
+  contenu_fr: String,
+  votes_pour: { type: Number, default: 0 },
+  votes_contre: { type: Number, default: 0 },
+  article_image: String, // 👈 AJOUTER CETTE LIGNE
+});
+module.exports = mongoose.models.Match || mongoose.model('Match', matchSchema);
