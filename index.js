@@ -100,4 +100,4 @@ app.patch('/api/matches/:id', async (req, res) => { try { const d = req.body; if
 app.delete('/api/matches/:id', async (req, res) => { try { await Match.findByIdAndDelete(req.params.id); res.status(204).send(); } catch (e) { res.status(500).json({ m: e.message }); } });
 app.post('/api/matches/:id/vote', async (req, res) => { try { const { vote_type } = req.body; const f = vote_type === 'pour' ? 'votes_pour' : 'votes_contre'; await Match.findByIdAndUpdate(req.params.id, { $inc: { [f]: 1 } }); const u = await Match.findById(req.params.id).populate('competition').populate('equipe_domicile').populate('equipe_exterieur'); res.json(u); } catch (e) { res.status(500).json({ m: e.message }); }});
 
-app.listen(port, () => console.log(`Serveur démarré sur http://localhost:${port}`));
+module.exports = app;
