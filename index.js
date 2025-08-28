@@ -8,11 +8,19 @@ require('dotenv').config();
 const Match = require('./models/Match');
 const League = require('./models/League');
 const Team = require('./models/Team');
-const Settings = require('./models/Settings'); // Importer le nouveau modèle
+const Settings = require('./models/Settings');
 
 const app = express();
-const port = 3000;
-app.use(cors());
+
+// --- CONFIGURATION CORS POUR LA PRODUCTION ---
+// On autorise uniquement votre site frontend à communiquer avec ce backend
+const corsOptions = {
+  origin: 'https://polemicometre-backend.vercel.app', // IMPORTANT: C'est l'URL de votre site VISITEUR (frontend)
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+// --- FIN DE LA CONFIGURATION ---
+
 app.use(express.json());
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
@@ -59,30 +67,8 @@ app.post('/api/upload/article-image', upload.single('image'), (req, res) => {
 app.get('/api/stats', async (req, res) => { try { const leagueCount = await League.countDocuments(); const teamCount = await Team.countDocuments(); const matchCount = await Match.countDocuments(); const ratedMatchCount = await Match.countDocuments({ status: 'terminé_noté' }); res.json({ leagues: leagueCount, teams: teamCount, matches: matchCount, ratedMatches: ratedMatchCount }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
 app.get('/api/global-score', async (req, res) => { try { const ratedMatches = await Match.find({ status: 'terminé_noté' }); let globalPolemicScore = 0; if (ratedMatches.length > 0) { const totalScore = ratedMatches.reduce((acc, match) => acc + match.score_polemicometre, 0); globalPolemicScore = Math.round(totalScore / ratedMatches.length); } res.json({ globalScore: globalPolemicScore }); } catch (e) { res.status(500).json({ m: "Erreur lors du calcul du score global" }); } });
 app.get('/api/articles', async (req, res) => { try { const page = parseInt(req.query.page) || 1; const limit = parseInt(req.query.limit) || 2; const skip = (page - 1) * limit; const totalArticles = await Match.countDocuments({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }); const articles = await Match.find({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }).sort({ date_match: -1 }).skip(skip).limit(limit).populate('competition equipe_domicile equipe_exterieur'); res.json({ articles, totalPages: Math.ceil(totalArticles / limit), currentPage: page }); } catch (e) { res.status(500).json({ m: "Erreur lors de la récupération des articles" }); } });
-
-// NOUVELLES ROUTES POUR LES RÉGLAGES
-app.get('/api/settings', async (req, res) => {
-  try {
-    let settings = await Settings.findOne();
-    if (!settings) {
-      settings = new Settings();
-      await settings.save();
-    }
-    res.json(settings);
-  } catch (e) {
-    res.status(500).json({ m: "Erreur" });
-  }
-});
-
-app.patch('/api/settings', async (req, res) => {
-  try {
-    const updatedSettings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
-    res.json(updatedSettings);
-  } catch (e) {
-    res.status(400).json({ m: e.message });
-  }
-});
-
+app.get('/api/settings', async (req, res) => { try { let settings = await Settings.findOne(); if (!settings) { settings = new Settings(); await settings.save(); } res.json(settings); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
+app.patch('/api/settings', async (req, res) => { try { const updatedSettings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true }); res.json(updatedSettings); } catch (e) { res.status(400).json({ m: e.message }); } });
 app.get('/api/leagues', async (req, res) => { try { const d = await League.find().sort({ name: 1 }); res.json(d); } catch (e) { res.status(500).json({ m: e.message }); } });
 app.post('/api/leagues', async (req, res) => { try { const d = new League(req.body); await d.save(); res.status(201).json(d); } catch (e) { res.status(400).json({ m: e.message }); } });
 app.get('/api/leagues/:id', async (req, res) => { try { const d = await League.findById(req.params.id); res.json(d); } catch (e) { res.status(500).json({ m: e.message }); } });
@@ -100,4 +86,5 @@ app.patch('/api/matches/:id', async (req, res) => { try { const d = req.body; if
 app.delete('/api/matches/:id', async (req, res) => { try { await Match.findByIdAndDelete(req.params.id); res.status(204).send(); } catch (e) { res.status(500).json({ m: e.message }); } });
 app.post('/api/matches/:id/vote', async (req, res) => { try { const { vote_type } = req.body; const f = vote_type === 'pour' ? 'votes_pour' : 'votes_contre'; await Match.findByIdAndUpdate(req.params.id, { $inc: { [f]: 1 } }); const u = await Match.findById(req.params.id).populate('competition').populate('equipe_domicile').populate('equipe_exterieur'); res.json(u); } catch (e) { res.status(500).json({ m: e.message }); }});
 
+// On exporte l'app pour Vercel
 module.exports = app;
