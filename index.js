@@ -12,10 +12,9 @@ const Settings = require('./models/Settings');
 
 const app = express();
 
-// --- CONFIGURATION CORS POUR LA PRODUCTION ---
-// On autorise uniquement votre site frontend à communiquer avec ce backend
+// --- CONFIGURATION CORS FINALE POUR LA PRODUCTION ---
 const corsOptions = {
-  origin: 'https://polemicometre-backend.vercel.app', // IMPORTANT: C'est l'URL de votre site VISITEUR (frontend)
+  origin: 'https://polemicometre.xo.je', // On autorise VOTRE site
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
