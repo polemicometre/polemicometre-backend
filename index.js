@@ -11,15 +11,9 @@ const Settings = require('./models/Settings');
 
 const app = express();
 
-// --- CONFIGURATION CORS FINALE (LA BONNE) ---
-const allowedOrigins = [
-  'https://polemicometre.xo.je', // Ton site en ligne
-  'http://localhost:5173'         // Ta machine locale pour le développement
-];
-
+const allowedOrigins = ['https://polemicometre.xo.je', 'http://localhost:5173'];
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permet les requêtes sans origine (comme Postman) ou celles de la liste
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -29,18 +23,11 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
-// --- FIN DE LA CONFIGURATION ---
-
 app.use(express.json());
 
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log("Connexion MongoDB réussie !")).catch(err => console.log("Échec : ", err));
 
-cloudinary.config({ 
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
-  api_key: process.env.CLOUDINARY_API_KEY, 
-  api_secret: process.env.CLOUDINARY_API_SECRET 
-});
-
+cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET });
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
@@ -55,10 +42,7 @@ const handleUpload = (folder) => async (req, res) => {
       uploadStream.end(req.file.buffer);
     });
     res.status(201).json({ imageUrl: result.secure_url });
-  } catch (error) {
-    console.error("Erreur d'upload sur Cloudinary:", error);
-    res.status(500).json({ error: "Erreur lors de l'upload de l'image." });
-  }
+  } catch (error) { res.status(500).json({ error: "Erreur lors de l'upload de l'image." }); }
 };
 
 app.post('/api/upload/logo', upload.single('logo'), handleUpload('logos'));
@@ -79,6 +63,19 @@ app.post('/api/teams', async (req, res) => { try { const d = new Team(req.body);
 app.patch('/api/teams/:id', async (req, res) => { try { const d = await Team.findByIdAndUpdate(req.params.id, req.body, { new: true }); res.json(d); } catch (e) { res.status(400).json({ m: e.message }); } });
 app.delete('/api/teams/:id', async (req, res) => { try { await Team.findByIdAndDelete(req.params.id); res.status(204).send(); } catch (e) { res.status(500).json({ m: e.message }); } });
 app.post('/api/teams/batch', async (req, res) => { try { const { leagueId, teams } = req.body; const createdTeams = []; for (const teamData of teams) { let team = await Team.findOne({ name: teamData.name }); if (team) { if (!team.leagues.includes(leagueId)) { team.leagues.push(leagueId); await team.save(); } } else { team = new Team({ ...teamData, leagues: [leagueId] }); await team.save(); } createdTeams.push(team); } res.status(201).json(createdTeams); } catch (e) { res.status(400).json({ m: e.message }); } });
+
+// L'AJOUT EST ICI
+app.post('/api/teams/delete-multiple', async (req, res) => {
+    try {
+        const { ids } = req.body;
+        if (!ids || ids.length === 0) return res.status(400).json({ m: "Aucun ID fourni." });
+        await Team.deleteMany({ _id: { $in: ids } });
+        res.status(200).json({ m: "Équipes supprimées." });
+    } catch (e) {
+        res.status(500).json({ m: e.message });
+    }
+});
+
 app.get('/api/matches', async (req, res) => { try { const d = await Match.find().sort({ date_match: 1 }).populate('competition').populate('equipe_domicile').populate('equipe_exterieur'); res.json(d); } catch (e) { res.status(500).json({ m: e.message }); } });
 app.get('/api/matches/:id', async (req, res) => { try { const d = await Match.findById(req.params.id).populate('competition').populate('equipe_domicile').populate('equipe_exterieur'); if (!d) { return res.status(404).json({ m: "Match non trouvé" }); } res.json(d); } catch (e) { res.status(500).json({ m: e.message }); }});
 app.post('/api/matches', async (req, res) => { try { const d = new Match(req.body); await d.save(); res.status(201).json(d); } catch (e) { res.status(400).json({ m: e.message }); } });
