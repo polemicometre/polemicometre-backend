@@ -2,8 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
 require('dotenv').config();
 const Match = require('./models/Match');
 const League = require('./models/League');
@@ -17,19 +16,54 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
-
 app.use(express.json());
-app.use('/static', express.static(path.join(__dirname, 'public')));
 
+// --- CONNEXION À LA BDD ---
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log("Connexion MongoDB réussie !")).catch(err => console.log("Échec : ", err));
 
-const tempStorage = multer.diskStorage({ destination: (req, file, cb) => { const uploadPath = 'public/temp'; fs.mkdirSync(uploadPath, { recursive: true }); cb(null, uploadPath); }, filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname) });
-const upload = multer({ storage: tempStorage });
+// --- CONFIGURATION DE CLOUDINARY ---
+cloudinary.config({ 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_API_SECRET 
+});
 
-app.post('/api/upload/logo', upload.single('logo'), (req, res) => { if (!req.file) return res.status(400).send('Aucun fichier.'); const { type, leagueName } = req.body; const tempPath = req.file.path; const originalFileName = req.file.originalname; let finalPath = 'public/logos/'; if (type === 'team' && leagueName) { finalPath += leagueName; } else { finalPath += 'leagues'; } fs.mkdirSync(finalPath, { recursive: true }); const finalFilePath = path.join(finalPath, originalFileName); fs.rename(tempPath, finalFilePath, (err) => { if (err) { console.error("Erreur:", err); return res.status(500).send("Erreur."); } res.status(201).json({ fileName: originalFileName }); }); });
-app.post('/api/upload/article-image', upload.single('image'), (req, res) => { if (!req.file) return res.status(400).send('Aucun fichier.'); const tempPath = req.file.path; const originalFileName = req.file.originalname; const finalPath = 'public/images/articles'; fs.mkdirSync(finalPath, { recursive: true }); const finalFilePath = path.join(finalPath, originalFileName); fs.rename(tempPath, finalFilePath, (err) => { if (err) { console.error("Erreur:", err); return res.status(500).send("Erreur."); } res.status(201).json({ fileName: originalFileName }); }); });
+// --- CONFIGURATION DE MULTER POUR LA MÉMOIRE ---
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+// --- ROUTES D'UPLOAD MODERNES AVEC CLOUDINARY ---
+const handleUpload = (folder) => async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Aucun fichier uploadé' });
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { folder: `polemicometre/${folder}` },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        }
+      );
+      uploadStream.end(req.file.buffer);
+    });
+
+    // On renvoie l'URL sécurisée de l'image
+    res.status(201).json({ imageUrl: result.secure_url });
+
+  } catch (error) {
+    console.error("Erreur d'upload sur Cloudinary:", error);
+    res.status(500).json({ error: "Erreur lors de l'upload de l'image." });
+  }
+};
+
+app.post('/api/upload/logo', upload.single('logo'), handleUpload('logos'));
+app.post('/api/upload/article-image', upload.single('image'), handleUpload('article_images'));
+
+
+// --- ROUTES API (INCHANGÉES) ---
 app.get('/api/stats', async (req, res) => { try { const leagueCount = await League.countDocuments(); const teamCount = await Team.countDocuments(); const matchCount = await Match.countDocuments(); const ratedMatchCount = await Match.countDocuments({ status: 'terminé_noté' }); res.json({ leagues: leagueCount, teams: teamCount, matches: matchCount, ratedMatches: ratedMatchCount }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
-app.get('/api/global-score', async (req, res) => { try { const ratedMatches = await Match.find({ status: 'terminé_noté' }); let globalPolemicScore = 0; if (ratedMatches.length > 0) { const totalScore = ratedMatches.reduce((acc, match) => acc + match.score_polemicometre, 0); globalPolemicScore = Math.round(totalScore / ratedMatches.length); } res.json({ globalScore: globalPolemicScore }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
+app.get('/api/global-score', async (req, res) => { try { const ratedMatches = await Match.find({ status: 'terminé_noté' }); let globalPolemicScore = 0; if (ratedMatches.length > 0) { const totalScore = ratedMatches.reduce((acc, match) => acc + (match.score_polemicometre || 0), 0); globalPolemicScore = Math.round(totalScore / ratedMatches.length); } res.json({ globalScore: globalPolemicScore }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
 app.get('/api/articles', async (req, res) => { try { const page = parseInt(req.query.page) || 1; const limit = parseInt(req.query.limit) || 2; const skip = (page - 1) * limit; const totalArticles = await Match.countDocuments({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }); const articles = await Match.find({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }).sort({ date_match: -1 }).skip(skip).limit(limit).populate('competition equipe_domicile equipe_exterieur'); res.json({ articles, totalPages: Math.ceil(totalArticles / limit), currentPage: page }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
 app.get('/api/settings', async (req, res) => { try { let settings = await Settings.findOne(); if (!settings) { settings = new Settings(); await settings.save(); } res.json(settings); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
 app.patch('/api/settings', async (req, res) => { try { const updatedSettings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true }); res.json(updatedSettings); } catch (e) { res.status(400).json({ m: e.message }); } });
