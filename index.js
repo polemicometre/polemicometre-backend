@@ -12,60 +12,25 @@ const Settings = require('./models/Settings');
 
 const app = express();
 
-// --- CONFIGURATION CORS FINALE POUR LA PRODUCTION ---
 const corsOptions = {
-  origin: 'https://polemicometre.xo.je', // On autorise VOTRE site
+  origin: 'https://polemicometre.xo.je',
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
-// --- FIN DE LA CONFIGURATION ---
 
 app.use(express.json());
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log("Connexion MongoDB réussie !")).catch(err => console.log("Échec : ", err));
 
-const tempStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = 'public/logos/temp';
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
+const tempStorage = multer.diskStorage({ destination: (req, file, cb) => { const uploadPath = 'public/temp'; fs.mkdirSync(uploadPath, { recursive: true }); cb(null, uploadPath); }, filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname) });
 const upload = multer({ storage: tempStorage });
 
-app.post('/api/upload/logo', upload.single('logo'), (req, res) => {
-  if (!req.file) return res.status(400).send('Aucun fichier.');
-  const { type, leagueName } = req.body;
-  const tempPath = req.file.path;
-  const originalFileName = req.file.originalname;
-  let finalPath = 'public/logos/';
-  if (type === 'team' && leagueName) { finalPath += leagueName; } else { finalPath += 'leagues'; }
-  fs.mkdirSync(finalPath, { recursive: true });
-  const finalFilePath = path.join(finalPath, originalFileName);
-  fs.rename(tempPath, finalFilePath, (err) => {
-    if (err) { console.error("Erreur:", err); return res.status(500).send("Erreur."); }
-    res.status(201).json({ fileName: originalFileName });
-  });
-});
-
-app.post('/api/upload/article-image', upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).send('Aucun fichier.');
-  const tempPath = req.file.path;
-  const originalFileName = req.file.originalname;
-  const finalPath = 'public/images/articles';
-  fs.mkdirSync(finalPath, { recursive: true });
-  const finalFilePath = path.join(finalPath, originalFileName);
-  fs.rename(tempPath, finalFilePath, (err) => {
-    if (err) { console.error("Erreur:", err); return res.status(500).send("Erreur."); }
-    res.status(201).json({ fileName: originalFileName });
-  });
-});
-
+app.post('/api/upload/logo', upload.single('logo'), (req, res) => { if (!req.file) return res.status(400).send('Aucun fichier.'); const { type, leagueName } = req.body; const tempPath = req.file.path; const originalFileName = req.file.originalname; let finalPath = 'public/logos/'; if (type === 'team' && leagueName) { finalPath += leagueName; } else { finalPath += 'leagues'; } fs.mkdirSync(finalPath, { recursive: true }); const finalFilePath = path.join(finalPath, originalFileName); fs.rename(tempPath, finalFilePath, (err) => { if (err) { console.error("Erreur:", err); return res.status(500).send("Erreur."); } res.status(201).json({ fileName: originalFileName }); }); });
+app.post('/api/upload/article-image', upload.single('image'), (req, res) => { if (!req.file) return res.status(400).send('Aucun fichier.'); const tempPath = req.file.path; const originalFileName = req.file.originalname; const finalPath = 'public/images/articles'; fs.mkdirSync(finalPath, { recursive: true }); const finalFilePath = path.join(finalPath, originalFileName); fs.rename(tempPath, finalFilePath, (err) => { if (err) { console.error("Erreur:", err); return res.status(500).send("Erreur."); } res.status(201).json({ fileName: originalFileName }); }); });
 app.get('/api/stats', async (req, res) => { try { const leagueCount = await League.countDocuments(); const teamCount = await Team.countDocuments(); const matchCount = await Match.countDocuments(); const ratedMatchCount = await Match.countDocuments({ status: 'terminé_noté' }); res.json({ leagues: leagueCount, teams: teamCount, matches: matchCount, ratedMatches: ratedMatchCount }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
-app.get('/api/global-score', async (req, res) => { try { const ratedMatches = await Match.find({ status: 'terminé_noté' }); let globalPolemicScore = 0; if (ratedMatches.length > 0) { const totalScore = ratedMatches.reduce((acc, match) => acc + match.score_polemicometre, 0); globalPolemicScore = Math.round(totalScore / ratedMatches.length); } res.json({ globalScore: globalPolemicScore }); } catch (e) { res.status(500).json({ m: "Erreur lors du calcul du score global" }); } });
-app.get('/api/articles', async (req, res) => { try { const page = parseInt(req.query.page) || 1; const limit = parseInt(req.query.limit) || 2; const skip = (page - 1) * limit; const totalArticles = await Match.countDocuments({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }); const articles = await Match.find({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }).sort({ date_match: -1 }).skip(skip).limit(limit).populate('competition equipe_domicile equipe_exterieur'); res.json({ articles, totalPages: Math.ceil(totalArticles / limit), currentPage: page }); } catch (e) { res.status(500).json({ m: "Erreur lors de la récupération des articles" }); } });
+app.get('/api/global-score', async (req, res) => { try { const ratedMatches = await Match.find({ status: 'terminé_noté' }); let globalPolemicScore = 0; if (ratedMatches.length > 0) { const totalScore = ratedMatches.reduce((acc, match) => acc + match.score_polemicometre, 0); globalPolemicScore = Math.round(totalScore / ratedMatches.length); } res.json({ globalScore: globalPolemicScore }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
+app.get('/api/articles', async (req, res) => { try { const page = parseInt(req.query.page) || 1; const limit = parseInt(req.query.limit) || 2; const skip = (page - 1) * limit; const totalArticles = await Match.countDocuments({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }); const articles = await Match.find({ status: 'terminé_noté', titre_fr: { $exists: true, $ne: "" } }).sort({ date_match: -1 }).skip(skip).limit(limit).populate('competition equipe_domicile equipe_exterieur'); res.json({ articles, totalPages: Math.ceil(totalArticles / limit), currentPage: page }); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
 app.get('/api/settings', async (req, res) => { try { let settings = await Settings.findOne(); if (!settings) { settings = new Settings(); await settings.save(); } res.json(settings); } catch (e) { res.status(500).json({ m: "Erreur" }); } });
 app.patch('/api/settings', async (req, res) => { try { const updatedSettings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true }); res.json(updatedSettings); } catch (e) { res.status(400).json({ m: e.message }); } });
 app.get('/api/leagues', async (req, res) => { try { const d = await League.find().sort({ name: 1 }); res.json(d); } catch (e) { res.status(500).json({ m: e.message }); } });
@@ -85,5 +50,4 @@ app.patch('/api/matches/:id', async (req, res) => { try { const d = req.body; if
 app.delete('/api/matches/:id', async (req, res) => { try { await Match.findByIdAndDelete(req.params.id); res.status(204).send(); } catch (e) { res.status(500).json({ m: e.message }); } });
 app.post('/api/matches/:id/vote', async (req, res) => { try { const { vote_type } = req.body; const f = vote_type === 'pour' ? 'votes_pour' : 'votes_contre'; await Match.findByIdAndUpdate(req.params.id, { $inc: { [f]: 1 } }); const u = await Match.findById(req.params.id).populate('competition').populate('equipe_domicile').populate('equipe_exterieur'); res.json(u); } catch (e) { res.status(500).json({ m: e.message }); }});
 
-// On exporte l'app pour Vercel
 module.exports = app;

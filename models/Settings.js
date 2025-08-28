@@ -1,9 +1,3 @@
 const mongoose = require('mongoose');
-
-const settingsSchema = new mongoose.Schema({
-  siteTitle: { type: String, default: 'Polemicometre' },
-  siteFavicon: { type: String, default: 'favicon.ico' }
-});
-
-// Utilise 'mongoose.models.Settings' pour éviter de recompiler le modèle à chaque fois
+const settingsSchema = new mongoose.Schema({ siteTitle: { type: String, default: 'Polemicometre' }, siteFavicon: { type: String, default: 'favicon.ico' } });
 module.exports = mongoose.models.Settings || mongoose.model('Settings', settingsSchema);
