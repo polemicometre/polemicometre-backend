@@ -13,7 +13,7 @@ const app = express();
 
 // --- CONFIGURATION CORS FINALE (LA BONNE) ---
 const allowedOrigins = [
-  'https://polemicometre.online'
+  'https://polemicometre.online',
   'https://polemicometre.xo.je', // Ton site en ligne
   'http://localhost:5173'         // Ta machine locale pour le développement
 ];
