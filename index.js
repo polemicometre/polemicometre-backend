@@ -12,7 +12,7 @@ const Settings = require('./models/Settings');
 const app = express();
 
 // --- CONFIGURATION CORS FINALE (LA BONNE) ---
-const allowedOrigins = ['https://polemicomtre.online', 'http://localhost:5174', 'https://polemicometre.xo.je'];
+const allowedOrigins = ['https://www.polemicomtre.online', 'http://localhost:5174', 'https://polemicometre.xo.je'];
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
